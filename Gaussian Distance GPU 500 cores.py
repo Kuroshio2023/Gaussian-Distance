@@ -43,8 +43,8 @@ if __name__ == "__main__":
     data = pd.read_excel(input_file).to_numpy()
     data = data[:500]  # Limit to 20 rows for testing
 
-    s = sigma()
-    n = len(data)
+    s = 0.304
+    n = 500
 
     # Transfer data to GPU
     data_gpu = cp.array(data)
