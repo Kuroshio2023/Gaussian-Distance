@@ -36,8 +36,8 @@ def sigma(alpha=0.05):
 
 if __name__ == "__main__":
     # File paths
-    input_file = "Gaussian-Distance//northern-ireland dataset.xlsx"
-    output_file = "Gaussian-Distance//distance_matrix_gpu.xlsx"
+    input_file = "northern-ireland dataset.xlsx"
+    output_file = "distance_matrix_gpu.xlsx"
 
     # Load data
     data = pd.read_excel(input_file).to_numpy()
