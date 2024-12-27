@@ -11,7 +11,7 @@ import os
 cp.cuda.Device(1).use()
 
 @cuda.jit
-def compute_distance_matrix_gpu(data, s, result_matrix):
+def compute_distance_matrix_gpu(data, result_matrix):
     """Compute the distance matrix using GPU cores."""
     i, j = cuda.grid(2)
     n = data.shape[0]
@@ -21,18 +21,13 @@ def compute_distance_matrix_gpu(data, s, result_matrix):
 
         def gaussian_dist(t):
             return cp.linalg.norm(
-                (x1[0] * t + x1[1] * (1 - t)) * norm.pdf(t, 0.5, s) -
-                (x2[0] * t + x2[1] * (1 - t)) * norm.pdf(t, 0.5, s)
+                (x1[0] * t + x1[1] * (1 - t)) * norm.pdf(t, 0.5, 0.304) -
+                (x2[0] * t + x2[1] * (1 - t)) * norm.pdf(t, 0.5, 0.304)
             )
 
         result, _ = quad(gaussian_dist, -np.inf, np.inf)
         result_matrix[i, j] = result
-
-
-def sigma(alpha=0.05):
-    z_95 = norm.ppf(1 - alpha)
-    z_5 = norm.ppf(alpha)
-    return 1 / (z_95 - z_5)
+        
 
 if __name__ == "__main__":
     # File paths
@@ -43,7 +38,6 @@ if __name__ == "__main__":
     data = pd.read_excel(input_file).to_numpy()
     data = data[:500]  # Limit to 20 rows for testing
 
-    s = 0.304
     n = 500
 
     # Transfer data to GPU
@@ -59,7 +53,7 @@ if __name__ == "__main__":
 
     # Start computation
     with tqdm(total=n * n, desc="Computing distances") as pbar:
-        compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](data_gpu, s, distance_matrix_gpu)
+        compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](data_gpu, distance_matrix_gpu)
         pbar.update(n * n)
 
     # Transfer results back to CPU
