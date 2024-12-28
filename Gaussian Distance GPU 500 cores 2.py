@@ -9,13 +9,13 @@ from numba import cuda
 cp.cuda.Device(1).use()
 
 @cuda.jit
-def compute_distance_matrix_gpu(data, result_matrix, s):
-    """Compute the distance matrix using GPU cores."""
+def compute_distance_matrix_gpu(data, result_matrix, s, start_idx):
+    """Compute the distance matrix using GPU cores for a chunk."""
     i, j = cuda.grid(2)
     n = data.shape[0]
 
     if i < n and j < n:
-        x1, y1 = data[i]
+        x1, y1 = data[start_idx + i]
         x2, y2 = data[j]
 
         # Perform numerical integration using a simple approach (trapezoidal rule)
@@ -25,12 +25,12 @@ def compute_distance_matrix_gpu(data, result_matrix, s):
         dt = t_values[1] - t_values[0]
 
         for t in t_values:
-            term1 = (x1 * t + y1 * (1 - t)) * norm.pdf(t, 0.5, s)
-            term2 = (x2 * t + y2 * (1 - t)) * norm.pdf(t, 0.5, s)
+            norm_pdf = (1.0 / (s * cp.sqrt(2.0 * cp.pi))) * cp.exp(-0.5 * ((t - 0.5) / s) ** 2)
+            term1 = (x1 * t + y1 * (1 - t)) * norm_pdf
+            term2 = (x2 * t + y2 * (1 - t)) * norm_pdf
             dist += cp.linalg.norm(term1 - term2) * dt
         
         result_matrix[i, j] = dist
-
 
 if __name__ == "__main__":
     # File paths
@@ -42,6 +42,10 @@ if __name__ == "__main__":
     data = data[:500]  # Limit to 500 rows for testing
 
     n = 500
+    s = 0.304  # Adjustable constant
+
+    # Chunk size for progress tracking
+    chunk_size = 50
 
     # Transfer data to GPU
     data_gpu = cp.array(data)
@@ -50,15 +54,13 @@ if __name__ == "__main__":
     # Define grid and block dimensions for GPU parallelization
     threads_per_block = (25, 20)  # ~500 threads per block
     blocks_per_grid = (
-        (n + threads_per_block[0] - 1) // threads_per_block[0],
+        (chunk_size + threads_per_block[0] - 1) // threads_per_block[0],
         (n + threads_per_block[1] - 1) // threads_per_block[1]
     )
 
-    # Start computation
-    with tqdm(total=n * n, desc="Computing distances") as pbar:
-        s = 0.304  # You can adjust 's' as needed
-        compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](data_gpu, distance_matrix_gpu, s)
-        pbar.update(n * n)
+    # Start computation in chunks
+    for start_idx in tqdm(range(0, n, chunk_size), desc="Computing distances"):
+        compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](data_gpu, distance_matrix_gpu, s, start_idx)
 
     # Transfer results back to CPU
     distance_matrix = cp.asnumpy(distance_matrix_gpu)
