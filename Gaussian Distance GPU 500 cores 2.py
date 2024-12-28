@@ -1,7 +1,6 @@
 import cupy as cp
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
 from tqdm import tqdm
 from numba import cuda
 
@@ -9,22 +8,19 @@ from numba import cuda
 cp.cuda.Device(1).use()
 
 @cuda.jit
-def compute_distance_matrix_gpu(data, result_matrix, s, start_idx):
+def compute_distance_matrix_gpu(data, result_matrix, s, start_idx, t_values, dt):
     """Compute the distance matrix using GPU cores for a chunk."""
     i, j = cuda.grid(2)
     n = data.shape[0]
+    num_points = t_values.shape[0]
 
     if i < n and j < n:
         x1, y1 = data[start_idx + i]
         x2, y2 = data[j]
 
-        # Perform numerical integration using a simple approach (trapezoidal rule)
         dist = 0.0
-        num_points = 1000  # Number of points for integration
-        t_values = cp.linspace(-10, 10, num_points)
-        dt = t_values[1] - t_values[0]
-
-        for t in t_values:
+        for k in range(num_points):
+            t = t_values[k]
             norm_pdf = (1.0 / (s * cp.sqrt(2.0 * cp.pi))) * cp.exp(-0.5 * ((t - 0.5) / s) ** 2)
             term1 = (x1 * t + y1 * (1 - t)) * norm_pdf
             term2 = (x2 * t + y2 * (1 - t)) * norm_pdf
@@ -43,12 +39,17 @@ if __name__ == "__main__":
 
     n = 500
     s = 0.304  # Adjustable constant
+    num_points = 1000
+    T = 10.0  # Truncation limit for integration
+    t_values = cp.linspace(-T, T, num_points)
+    dt = (2 * T) / num_points
 
     # Chunk size for progress tracking
     chunk_size = 50
 
-    # Transfer data to GPU
+    # Transfer data and precomputed t_values to GPU
     data_gpu = cp.array(data)
+    t_values_gpu = cp.array(t_values)
     distance_matrix_gpu = cp.zeros((n, n), dtype=cp.float32)
 
     # Define grid and block dimensions for GPU parallelization
@@ -60,7 +61,10 @@ if __name__ == "__main__":
 
     # Start computation in chunks
     for start_idx in tqdm(range(0, n, chunk_size), desc="Computing distances"):
-        compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](data_gpu, distance_matrix_gpu, s, start_idx)
+        compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](
+            data_gpu, distance_matrix_gpu, s, start_idx, t_values_gpu, dt
+        )
+        cuda.synchronize()  # Ensure all GPU tasks for this chunk are complete
 
     # Transfer results back to CPU
     distance_matrix = cp.asnumpy(distance_matrix_gpu)
