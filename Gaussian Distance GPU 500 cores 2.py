@@ -2,7 +2,8 @@ import cupy as cp
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from numba import cuda
+from numba import cuda, float32
+import math
 
 # Set GPU 1 as the active device
 cp.cuda.Device(1).use()
@@ -21,10 +22,10 @@ def compute_distance_matrix_gpu(data, result_matrix, s, start_idx, t_values, dt)
         dist = 0.0
         for k in range(num_points):
             t = t_values[k]
-            norm_pdf = (1.0 / (s * cp.sqrt(2.0 * cp.pi))) * cp.exp(-0.5 * ((t - 0.5) / s) ** 2)
+            norm_pdf = (1.0 / (s * math.sqrt(2.0 * math.pi))) * cuda.math.exp(-0.5 * ((t - 0.5) / s) ** 2)
             term1 = (x1 * t + y1 * (1 - t)) * norm_pdf
             term2 = (x2 * t + y2 * (1 - t)) * norm_pdf
-            dist += cp.linalg.norm(term1 - term2) * dt
+            dist += math.sqrt((term1 - term2) ** 2) * dt
         
         result_matrix[i, j] = dist
 
@@ -48,8 +49,8 @@ if __name__ == "__main__":
     chunk_size = 50
 
     # Transfer data and precomputed t_values to GPU
-    data_gpu = cp.array(data)
-    t_values_gpu = cp.array(t_values)
+    data_gpu = cp.array(data, dtype=cp.float32)
+    t_values_gpu = cp.array(t_values, dtype=cp.float32)
     distance_matrix_gpu = cp.zeros((n, n), dtype=cp.float32)
 
     # Define grid and block dimensions for GPU parallelization
