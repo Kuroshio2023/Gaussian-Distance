@@ -15,19 +15,21 @@ def compute_distance_matrix_gpu(data, result_matrix, s, start_idx, t_values, dt)
     n = data.shape[0]
     num_points = t_values.shape[0]
 
-    if i < n and j < n:
-        x1, y1 = data[start_idx + i]
-        x2, y2 = data[j]
+    if start_idx + i >= n or j >= n:
+        return
 
-        dist = 0.0
-        for k in range(num_points):
-            t = t_values[k]
-            norm_pdf = (1.0 / (s * math.sqrt(2.0 * math.pi))) * cuda.math.exp(-0.5 * ((t - 0.5) / s) ** 2)
-            term1 = (x1 * t + y1 * (1 - t)) * norm_pdf
-            term2 = (x2 * t + y2 * (1 - t)) * norm_pdf
-            dist += math.sqrt((term1 - term2) ** 2) * dt
-        
-        result_matrix[i, j] = dist
+    x1, y1 = data[start_idx + i]
+    x2, y2 = data[j]
+
+    dist = 0.0
+    for k in range(num_points):
+        t = t_values[k]
+        norm_pdf = (1.0 / (s * math.sqrt(2.0 * math.pi))) * math.exp(-0.5 * ((t - 0.5) / s) ** 2)
+        term1 = (x1 * t + y1 * (1 - t)) * norm_pdf
+        term2 = (x2 * t + y2 * (1 - t)) * norm_pdf
+        dist += math.sqrt((term1 - term2) ** 2) * dt
+
+    result_matrix[i, j] = dist
 
 if __name__ == "__main__":
     # File paths
@@ -42,19 +44,18 @@ if __name__ == "__main__":
     s = 0.304  # Adjustable constant
     num_points = 1000
     T = 10.0  # Truncation limit for integration
-    t_values = cp.linspace(-T, T, num_points)
+    t_values_gpu = cp.linspace(-T, T, num_points, dtype=cp.float32)
     dt = (2 * T) / num_points
 
     # Chunk size for progress tracking
     chunk_size = 50
 
-    # Transfer data and precomputed t_values to GPU
+    # Transfer data to GPU
     data_gpu = cp.array(data, dtype=cp.float32)
-    t_values_gpu = cp.array(t_values, dtype=cp.float32)
     distance_matrix_gpu = cp.zeros((n, n), dtype=cp.float32)
 
     # Define grid and block dimensions for GPU parallelization
-    threads_per_block = (25, 20)  # ~500 threads per block
+    threads_per_block = (16, 16)
     blocks_per_grid = (
         (chunk_size + threads_per_block[0] - 1) // threads_per_block[0],
         (n + threads_per_block[1] - 1) // threads_per_block[1]
@@ -62,10 +63,14 @@ if __name__ == "__main__":
 
     # Start computation in chunks
     for start_idx in tqdm(range(0, n, chunk_size), desc="Computing distances"):
-        compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](
-            data_gpu, distance_matrix_gpu, s, start_idx, t_values_gpu, dt
-        )
-        cuda.synchronize()  # Ensure all GPU tasks for this chunk are complete
+        try:
+            compute_distance_matrix_gpu[blocks_per_grid, threads_per_block](
+                data_gpu, distance_matrix_gpu, s, start_idx, t_values_gpu, dt
+            )
+            cuda.synchronize()  # Ensure all GPU tasks for this chunk are complete
+        except cuda.CudaSupportError as e:
+            print(f"CUDA kernel launch error: {e}")
+            break
 
     # Transfer results back to CPU
     distance_matrix = cp.asnumpy(distance_matrix_gpu)
