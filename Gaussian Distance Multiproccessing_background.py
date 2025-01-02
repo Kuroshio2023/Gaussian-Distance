@@ -56,7 +56,7 @@ def init_worker(shared_counter, shared_lock, shared_progress_bar):
 if __name__ == "__main__":
     file_path = "northern-ireland dataset.xlsx"
     data = pd.read_excel(file_path).to_numpy()
-    data = data[:200]  # Limit to 100 rows for testing
+    data = data[:1000]  # Limit to 100 rows for testing
     s = sigma()
     n = len(data)
     distance_matrix = np.zeros((n, n))
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     # Prepare multiprocessing
     start = time.time()
     with tqdm(total=n, desc="Processing rows", position=0, leave=True) as progress_bar:
-        with Pool(processes=100, initializer=init_worker, initargs=(shared_counter, shared_lock, progress_bar)) as pool:
+        with Pool(processes=200, initializer=init_worker, initargs=(shared_counter, shared_lock, progress_bar)) as pool:
             results = pool.map(compute_distance_row, [(i, data, s) for i in range(n)])
 
     end = time.time()
