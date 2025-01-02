@@ -4,8 +4,12 @@ from scipy.integrate import quad
 from scipy.stats import norm
 import pandas as pd
 import time
+import os
 from multiprocessing import Pool, Value, Lock
 from tqdm import tqdm  # Import tqdm
+
+os.chdir('/user1/postdoc/miu/paramita2000_p/Gaussian-Distance/')
+
 
 # Global variables for multiprocessing
 counter = None
