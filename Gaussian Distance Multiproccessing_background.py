@@ -60,7 +60,6 @@ def init_worker(shared_counter, shared_lock, shared_progress_bar):
 if __name__ == "__main__":
     file_path = "northern-ireland dataset.xlsx"
     data = pd.read_excel(file_path).to_numpy()
-    data = data[:1000]  # Limit to 100 rows for testing
     s = sigma()
     n = len(data)
     distance_matrix = np.zeros((n, n))
